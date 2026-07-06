@@ -43,7 +43,12 @@ ENV NODE_ENV=production
 # @prisma/client is excluded from the tsup bundle (needs its native query
 # engine), so node_modules has to come along. Everything else is inlined
 # into apps/ws-server/dist/index.js by tsup.
+#
+# pnpm does NOT hoist dependencies into a flat root node_modules — each
+# workspace package gets its own node_modules containing symlinks into the
+# root .pnpm store. Both pieces are needed for those symlinks to resolve.
 COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/ws-server/node_modules ./apps/ws-server/node_modules
 COPY --from=build /app/packages/db/prisma ./packages/db/prisma
 COPY --from=build /app/apps/ws-server/dist ./apps/ws-server/dist
 COPY --from=build /app/apps/ws-server/package.json ./apps/ws-server/package.json
