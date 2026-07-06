@@ -20,7 +20,11 @@ COPY apps/ws-server/package.json apps/ws-server/package.json
 # web's manifest is needed too, purely so pnpm can resolve the workspace glob —
 # we never copy or build the actual Next.js app in this image.
 COPY apps/web/package.json apps/web/package.json
-RUN pnpm install --frozen-lockfile
+# --ignore-scripts: the root package.json's postinstall (build:packages) would
+# otherwise run right now and fail — at this point only manifests exist, not
+# the actual src/ folders. The build stage below builds shared/db explicitly
+# once the real source has been copied in, so skipping postinstall here is safe.
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 # ---- build ---------------------------------------------------------------
 FROM deps AS build
