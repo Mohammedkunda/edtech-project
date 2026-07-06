@@ -1,0 +1,93 @@
+// Local-First Collaborative Document Editor — data model (plan §5).
+// PostgreSQL. UUIDs everywhere; Yjs snapshots stored as BYTEA.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  name      String?
+  passwordHash String? @map("password_hash")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  ownedDocuments Document[]         @relation("OwnedDocuments")
+  access         DocumentAccess[]
+  snapshots      DocumentSnapshot[] @relation("SnapshotAuthor")
+  auditLogs      SyncAuditLog[]
+
+  openRouterApiKey String? @map("open_router_api_key")
+  openRouterModel  String? @map("open_router_model")
+
+  @@map("users")
+}
+
+model Document {
+  id        String   @id @default(uuid()) @db.Uuid
+  title     String   @default("Untitled document")
+  ownerId   String   @map("owner_id") @db.Uuid
+  owner     User     @relation("OwnedDocuments", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  // Current authoritative Yjs state, persisted by the sync server (debounced).
+  yjsState  Bytes?   @map("yjs_state")
+
+  access    DocumentAccess[]
+  snapshots DocumentSnapshot[]
+  auditLogs SyncAuditLog[]
+
+  @@index([ownerId])
+  @@map("documents")
+}
+
+model DocumentAccess {
+  id         String   @id @default(uuid()) @db.Uuid
+  documentId String   @map("document_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  // owner | editor | viewer. CHECK constraint applied via migration (plan §5/§8).
+  role       String   @default("viewer")
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, userId])
+  @@index([userId])
+  @@map("document_access")
+}
+
+model DocumentSnapshot {
+  id         String   @id @default(uuid()) @db.Uuid
+  documentId String   @map("document_id") @db.Uuid
+  // Full Yjs state vector snapshot: Y.encodeStateAsUpdate(doc) output.
+  yjsState   Bytes    @map("yjs_state")
+  label      String?
+  createdBy  String   @map("created_by") @db.Uuid
+  creator    User     @relation("SnapshotAuthor", fields: [createdBy], references: [id], onDelete: Cascade)
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([documentId, createdAt])
+  @@map("document_snapshots")
+}
+
+model SyncAuditLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  documentId       String   @map("document_id") @db.Uuid
+  // Nullable: a rejected payload may not have a verified user (e.g. bad auth).
+  userId           String?  @map("user_id") @db.Uuid
+  payloadSizeBytes Int      @map("payload_size_bytes")
+  accepted         Boolean
+  rejectionReason  String?  @map("rejection_reason")
+  document         Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  user             User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([documentId, createdAt])
+  @@map("sync_audit_log")
+}

@@ -1,0 +1,24 @@
+# Local PostgreSQL for development.
+# Run:  docker compose up -d db
+# Stop: docker compose down
+# Wipe: docker compose down -v
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: localfirst-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: localfirst
+    ports:
+      - "5433:5432"
+    volumes:
+      - localfirst-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d localfirst"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  localfirst-db:
